@@ -18,18 +18,22 @@ services:
     restart: unless-stopped
 
   temporal-layer:
-    image: python:3.11-slim
+    build:
+      context: ./temporal-layer
+      dockerfile: Dockerfile
     container_name: ardupilot-temporal-layer
-    command: tail -f /dev/null # Placeholder until M1 is implemented
-    volumes:
-      - ./temporal-layer:/app
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
 
   llm-orchestrator:
-    image: python:3.11-slim
+    build:
+      context: ./llm-orchestrator
+      dockerfile: Dockerfile
     container_name: ardupilot-llm-orchestrator
-    command: tail -f /dev/null # Placeholder until M2 is implemented
-    volumes:
-      - ./llm-orchestrator:/app
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
 
   web-gateway:
     image: nginx:alpine

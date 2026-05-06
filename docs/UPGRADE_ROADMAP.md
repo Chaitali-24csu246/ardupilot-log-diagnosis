@@ -73,31 +73,6 @@ through the gateway and returns the same results as before.
 
 ---
 
-## Milestone 1 — Temporal Pattern Layer (HMM + Kalman)
-
-**Goal:** Add a temporal filtering layer that distinguishes transient noise from real anomalies.
-
-**Status:** ⬜ Not started
-
-### Motivation
-
-The current XGBoost model operates on per-sample features. It cannot distinguish between:
-- A genuine EKF divergence that persists for 3+ seconds.
-- A single noisy GPS spike that looks like an anomaly for 200ms.
-
-An HMM (Hidden Markov Model) sitting **before** the classifier can learn state transitions
-(`NORMAL → DEGRADING → FAILED`) and filter out transient behavior. This improves precision
-on noisy logs without changing the core diagnostic logic.
-
-### Tasks
-
-- [ ] Create `temporal-layer/` service.
-- [ ] Train an HMM on the existing 140+ logs (healthy vs. degrading vs. failed state sequences).
-- [ ] Add a Kalman filter for IMU/GPS time-series smoothing before feature extraction.
-- [ ] Expose a `/filter` endpoint: takes raw feature sequences, returns smoothed sequences + state labels.
-- [ ] Integrate temporal filter output as an **optional pre-processing step** in `core-engine`.
-- [ ] Add tests for transient vs. persistent anomaly distinction.
-
 ### Deliverable
 
 `temporal-layer` container available. `core-engine` can optionally call it before running XGBoost.

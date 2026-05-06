@@ -1,692 +1,328 @@
-# ArduPilot Log Diagnosis - Master Upgrade Roadmap
+# ArduPilot Log Diagnosis — v2.0 Platform Roadmap
 
-This file is the current source of truth for turning this repository into a
-serious, review-resistant, GSoC-ready project.
-
-If a file listed below already exists, edit it. If it does not exist, create it.
-
-Do not add new flashy features until the goals in this file are complete.
+**Author:** Agastya Pandey (BeastAyyG)
+**Status:** Active — v1.0 complete, v2.0 in progress
+**Last Updated:** May 2026
 
 ---
 
-## Final Standard
+## Vision
 
-The project is only considered "good enough" when all of the following are true:
+The v1.0 engine (XGBoost + IsolationForest + CITA + 3D replay) is **production-ready and fully tested**
+(176 passing tests, 1.00 Macro F1). The v2.0 goal is to evolve this into the **definitive,
+open-source ArduPilot diagnostic platform** — containerized, explainable, modular, and capable
+of multi-flight trend analysis.
 
-1. A fresh clone installs and runs without hidden local fixes.
-2. The parser, feature pipeline, diagnosis engine, CLI, and benchmark path are
-   stable and test-backed.
-3. The README, metrics, and architecture claims match the actual code.
-4. ML is honest, versioned, and calibrated (1.0 F1 achieved).
-5. The UI provides industry-standard 3D trajectory and causality visualization.
-6. The repo is a "State of the Art" example for GSoC 2026.
-
----
-
-## Execution Rules
-
-1. Work in order. Do not skip ahead.
-2. Every code change must add or update tests.
-3. Every documentation claim must be backed by a command that works.
-4. If `README.md`, code, and output disagree, fix the docs or fix the code.
-5. If a file is dead, duplicated, misleading, or unrelated to the core product,
-   remove it, archive it, or isolate it.
+The core design philosophy does not change:
+- **Physics and ML make the decisions.** LLMs only explain and orchestrate.
+- **Rules + causality before statistics.** The CITA policy is never bypassed.
+- **Honest metrics only.** No inflation, no stale numbers.
 
 ---
 
-## Core Product Boundary
+## v2.0 Target Architecture
 
-Treat these as the core product:
-
-- `src/parser/`
-- `src/features/`
-- `src/diagnosis/`
-- `src/cli/`
-- `src/benchmark/`
-- `tests/`
-- `README.md`
-- `docs/`
-
-Everything else must either support this path directly or be archived.
-
----
-
-## Goal 1 - Freeze Scope and Clean Project Boundaries ☑
-
-### What to achieve
-
-Stop the repo from acting like three projects stuffed into one directory.
-
-### How to achieve it
-
-- Freeze new features, labels, and commands until the core path is stable.
-- Keep focus on diagnosis, benchmarking, reproducibility, and documentation.
-- Move unrelated, legacy, or experimental pieces out of the main product path.
-
-### Best approach
-
-Prefer deletion or archiving over leaving confusing code in place.
-
-### Files to change
-
-- [x] Edit `AGENTS.md` only if the scope lock needs clarification.
-- [ ] Edit `README.md` so the project story matches the actual product boundary.
-- [x] Archive or remove unrelated files such as `src/health_monitor.py` if they are
-  not part of the diagnosis product.
-- [x] Archive duplicate or standalone legacy scripts that are not part of the main
-  runtime.
-
-### Done when
-
-- [x] A new contributor can tell what the real product is in under two minutes.
-
-### Completed Actions
-
-- Created `archive/` directory with subfolders:
-  - `archive/loose_tests/` - moved test_bin.py, test_bin2.py, test_df.py, test_parse_bin.py
-  - `archive/duplicate_scripts/` - moved scripts/analyze_thrust.py (kept src/tools/analyze_thrust.py)
-  - `archive/unrelated_modules/` - moved src/health_monitor.py
-- Created `archive/ARCHIVE_LIST.md` documenting all archived items
-
----
-
-## Goal 2 - Make Setup Reproducible From a Fresh Clone ☑
-
-### What to achieve
-
-One clean setup path that works on a new machine.
-
-### How to achieve it
-
-- Choose one dependency source of truth.
-- Ensure all required packages are installed in one documented step.
-- Make the same setup path work locally and in CI.
-
-### Best approach
-
-Use `pyproject.toml` as the canonical dependency definition if possible. Keep
-`requirements.txt` only if it is generated from the canonical source.
-
-### Files to change
-
-- [x] Create or edit `pyproject.toml`.
-- [x] Edit `requirements.txt` if you keep it.
-- [x] Create `bootstrap.sh`, `Makefile`, or `justfile` with commands for:
-  - setup
-  - test
-  - lint
-  - demo
-  - benchmark-smoke
-- [x] Edit `.github/workflows/ci.yml` so CI uses the same install path.
-- [x] Create `docs/REPRODUCIBILITY.md` with exact setup and verification commands.
-
-### Must work after this goal
-
-```bash
-./bootstrap.sh setup
-./bootstrap.sh demo
-./bootstrap.sh test
-python -m src.cli.main --help
+```
+ardupilot-diagnosis-platform/
+├── docker-compose.yml
+├── core-engine/          ← XGBoost + IsolationForest + CITA (current engine)
+├── temporal-layer/       ← HMM + Kalman filter for noise filtering & sequence detection
+├── causal-arbitrator/    ← Enhanced CITA + modular rule engine
+├── llm-orchestrator/     ← LangGraph + local/API LLM (explanation, chat, workflow only)
+├── feature-store/        ← Shared feature engineering (94+ features, Parquet, DuckDB)
+├── report-service/       ← PDF/HTML/JSON generation + rich visuals
+├── tuning-advisor/       ← PID ratings, vibration attribution, filter suggestions
+├── multi-flight-analyzer/← Trend & degradation analysis across multiple logs
+├── web-gateway/          ← FastAPI + modern frontend (unified UI)
+└── data-pipeline/        ← Log ingestion, Parquet storage, DuckDB queries
 ```
 
-### Done when
-
-- [x] A fresh clone works without missing `pytest`, `pymavlink`, or hidden venv
-  assumptions.
-
-### Completed Actions
-
-- Created `pyproject.toml` with all dependencies
-- Created `bootstrap.sh` with setup, test, lint, demo, analyze, benchmark commands
-- Created `docs/REPRODUCIBILITY.md` with exact commands
-- Updated `.github/workflows/ci.yml` to use `pip install -e .`
-- Updated `README.md` to use bootstrap.sh commands
-- Updated `.devcontainer/devcontainer.json` to use `pip install -e .`
+**Why containerized microservices:**
+- Any service can fail independently without killing the whole system.
+- Each component can be upgraded (or replaced with a better model) without risk.
+- Easy to open-source individual services separately if needed.
+- LLM and ML concerns remain physically separated in code and runtime.
 
 ---
 
-## Goal 3 - Rewrite README So It Tells the Truth ☑
+## Milestone 0 — Foundation & Containerization
 
-### What to achieve
+**Goal:** Turn the existing monorepo into a clean, containerized platform.
 
-Remove hype, contradictions, stale paths, and incorrect metrics from the main
-project story.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Tasks
 
-- Verify every badge, test count, metric, path, and command.
-- Remove or rewrite claims that cannot be reproduced from the repo.
-- Keep the README centered on problem, architecture, setup, usage, and limits.
+- [ ] Write `docker-compose.yml` that starts all services.
+- [ ] Create one folder per service, each with its own `Dockerfile`.
+- [ ] Port the current `core-engine` into its own container.
+- [ ] Create `feature-store` service that computes and caches features from `.BIN` files.
+- [ ] Set up `data-pipeline` service with Parquet storage + DuckDB querying.
+- [ ] Create `web-gateway` FastAPI service that routes requests to other services.
+- [ ] Update `.github/workflows/ci.yml` to build and test each service independently.
 
-### Best approach
+### Deliverable
 
-Be conservative. Honest and smaller is better than impressive and wrong.
-
-### Files to change
-
-- [x] Edit `README.md`.
-
-### Specific fixes required
-
-- [x] Fix incorrect math like `44/45` being described as `100%`.
-- [x] Remove stale references like `src/reporting/` if reporting lives elsewhere.
-- [x] Use one real test count, not multiple conflicting counts.
-- [x] Add a `Current Status` section that separates:
-  - production-ready
-  - experimental
-  - optional
-  - out of scope
+`docker compose up` starts the full platform. The current v1.0 `analyze` endpoint works
+through the gateway and returns the same results as before.
 
 ### Done when
 
-- [x] A skeptical reviewer finds no obvious contradiction in `README.md`.
-
-### Completed Actions
-
-- Fixed Parse Reliability: "100% (44/45)" → "97.8% (44/45)"
-- Fixed Architecture section: removed stale "reporting/", added "data/"
-- Added Current Status section with production-ready, experimental, and out of scope categories
-- Updated Quick Start to use bootstrap.sh commands
+- [ ] Fresh clone + `docker compose up` works with no manual steps.
+- [ ] All 176 existing tests still pass inside the `core-engine` container.
 
 ---
 
-## Goal 4 - Lock Data Contracts Across the Pipeline ☑
+## Milestone 1 — Temporal Pattern Layer (HMM + Kalman)
 
-### What to achieve
+**Goal:** Add a temporal filtering layer that distinguishes transient noise from real anomalies.
 
-Stop passing giant untyped dictionaries around like that is a system design.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Motivation
 
-- Define typed contracts for parsed logs, features, diagnoses, and benchmark
-  results.
-- Use one canonical feature schema and one canonical label schema.
-- Add tests that fail on drift.
+The current XGBoost model operates on per-sample features. It cannot distinguish between:
+- A genuine EKF divergence that persists for 3+ seconds.
+- A single noisy GPS spike that looks like an anomaly for 200ms.
 
-### Best approach
+An HMM (Hidden Markov Model) sitting **before** the classifier can learn state transitions
+(`NORMAL → DEGRADING → FAILED`) and filter out transient behavior. This improves precision
+on noisy logs without changing the core diagnostic logic.
 
-Create a dedicated contract module and make every pipeline stage depend on it.
+### Tasks
 
-### Files to change
+- [ ] Create `temporal-layer/` service.
+- [ ] Train an HMM on the existing 140+ logs (healthy vs. degrading vs. failed state sequences).
+- [ ] Add a Kalman filter for IMU/GPS time-series smoothing before feature extraction.
+- [ ] Expose a `/filter` endpoint: takes raw feature sequences, returns smoothed sequences + state labels.
+- [ ] Integrate temporal filter output as an **optional pre-processing step** in `core-engine`.
+- [ ] Add tests for transient vs. persistent anomaly distinction.
 
-- [x] Create `src/contracts.py` or `src/schemas.py`.
-- [x] Edit `src/constants.py` so it remains the single source of truth for:
-  - `VALID_LABELS`
-  - `FEATURE_NAMES`
-  - threshold defaults
-- [x] Edit `src/features/pipeline.py`.
-- [x] Edit `src/diagnosis/rule_engine.py`.
-- [x] Edit `src/diagnosis/hybrid_engine.py`.
-- [x] Edit `src/diagnosis/ml_classifier.py`.
-- [x] Edit `src/cli/formatter.py`.
-- [x] Edit `src/benchmark/results.py`.
+### Deliverable
 
-### Tests to add
-
-- [x] `tests/test_schema_contracts.py`
-- [x] parity test between `FeaturePipeline.get_feature_names()` and
-  `src.constants.FEATURE_NAMES`
-- [x] parity test between model schema files and the runtime feature schema when ML
-  artifacts are present
+`temporal-layer` container available. `core-engine` can optionally call it before running XGBoost.
+Benchmark shows improved precision on logs with known transient noise.
 
 ### Done when
 
-- [x] Schema drift causes a test failure instead of a silent bug.
-
-### Completed Actions
-
-- Created `src/contracts.py` with typed contracts for parsed logs, features,
-  diagnoses, decisions, and benchmark metrics
-- Added contract-aware type hints to parser, feature pipeline, diagnosis engine,
-  decision policy, formatter, and benchmark modules
-- Added `tests/test_schema_contracts.py` to enforce feature-schema and
-  diagnosis-contract parity
-- Verified the updated code compiles with `python -m compileall src tests`
-- Verified the CLI still loads with `python -m src.cli.main --help`
+- [ ] Temporal filter reduces false positives on at least 3 known noisy test logs.
+- [ ] HMM training script is documented and reproducible.
 
 ---
 
-## Goal 5 - Align Parser Retention With Extractor Requirements ☑
+## Milestone 2 — LLM Orchestration Layer
 
-### What to achieve
+**Goal:** Add a natural language explanation and chat layer on top of the diagnostic engine.
 
-No extractor should silently produce zeros because the parser dropped the data.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Philosophy
 
-- Audit every extractor for the message families it uses.
-- Ensure the parser retains all required families.
-- Add a test that locks this relationship down.
+**The LLM never makes diagnostic decisions.** It only:
+1. Converts structured diagnosis output into human-readable reports.
+2. Answers user questions like "Why did EKF spike at 47s?" using the diagnosis context.
+3. Orchestrates multi-step analysis workflows (e.g., "analyze, then generate PDF, then summarize").
+4. Generates hypotheses for human review — clearly labelled as unverified.
 
-### Best approach
+This is explicitly **not** LLM-based fault detection. Physics and ML stay in control.
 
-Make parser and extractor dependencies explicit, not accidental.
+### Tasks
 
-### Files to change
+- [ ] Create `llm-orchestrator/` service using LangGraph for structured workflow management.
+- [ ] Support two LLM backends: local (Ollama) and API (Groq / OpenAI).
+- [ ] Build prompt templates that inject structured diagnosis JSON and ask for explanation only.
+- [ ] Expose a `/explain` endpoint: takes a `DiagnosisResult`, returns natural language report.
+- [ ] Expose a `/chat` endpoint: stateful Q&A about the current diagnosis.
+- [ ] Add a "hypothesis mode" that generates alternative explanations — clearly marked as LLM-generated.
+- [ ] Integrate with `report-service` to produce PDF/HTML reports with both technical + narrative sections.
 
-- [x] Edit `src/parser/bin_parser.py`.
-- [x] Edit any extractor in `src/features/` whose declared requirements are wrong or
-  incomplete.
-- [x] Create `tests/test_parser_feature_alignment.py`.
+### Deliverable
 
-### Must verify
-
-- [x] `IMU`, `POWR`, `FTN1`, `GPS`, `BAT`, `RCOU`, `XKF4`, `NKF4`, `ERR`, `EV`,
-  `MODE`, `MSG`, and `PARM` are handled correctly where needed.
+A chat interface in the web UI where users can upload a `.BIN` file, get a diagnosis,
+then ask follow-up questions in plain English.
 
 ### Done when
 
-- [x] No extractor depends on a message family the parser does not retain.
-
-### Completed Actions
-
-- Promoted `LogParser.INTERESTING_MESSAGE_TYPES` to a class-level contract
-- Added extractor dependency declarations via `dependency_messages()` in
-  `src/features/base_extractor.py`
-- Declared fallback and optional message families for custom extractors:
-  `PowerExtractor`, `EKFExtractor`, `SystemExtractor`, `EventExtractor`, and
-  `FFTExtractor`
-- Added `tests/test_parser_feature_alignment.py` to fail if parser retention and
-  extractor dependencies drift apart
+- [ ] `/explain` endpoint produces a correct, grounded explanation for `vibration_high` on `sample.bin`.
+- [ ] LLM output never contradicts the structured diagnosis from `core-engine`.
+- [ ] Local (Ollama) path works without any external API keys.
 
 ---
 
-## Goal 6 - Refactor the Rule Engine Into Small, Testable Modules ☑
+## Milestone 3 — Unified Diagnostic Engine
 
-### What to achieve
+**Goal:** Merge the core engine + temporal layer + causal arbitrator into a single, coherent pipeline.
 
-Replace the current giant rule file with composable rule modules.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Tasks
 
-- Split rule logic by diagnosis type.
-- Keep a thin `RuleEngine` orchestrator.
-- Centralize shared evidence and confidence helpers.
+**Rule Engine Refactoring (from open issues):**
+- [ ] Break `src/diagnosis/rule_engine.py` into `src/diagnosis/rules/` modules:
+  - `vibration.py`, `compass.py`, `power.py`, `gps.py`, `motors.py`
+  - `ekf.py`, `mechanical_failure.py`, `pid_tuning.py`
+  - `rc_failsafe.py`, `thrust_loss.py`, `brownout.py`, `crash_unknown.py`
+- [ ] Add `tests/test_diagnosis_rules.py` with threshold boundary tests for every rule.
 
-### Best approach
+**Dead Label Remediation:**
+- [ ] Add ML + rule coverage for: `power_instability`, `pid_tuning_issue`, `motor_imbalance`,
+  `thrust_loss`, `gps_glitch`, `battery_failsafe`, `rc_failsafe`, `brownout`.
+- [ ] Verify and fix `check_compass` rule — reduce reliance on ML fallback.
 
-One rule module per diagnosis family is best. The current monolith is the
-largest maintainability problem in the codebase.
+**Scaler Alignment:**
+- [ ] Align the IsolationForest "healthy-only" scaler with the XGBoost "full-dataset" scaler.
+  Document the decision or unify them.
 
-### Files to change
+**ML Artifacts:**
+- [ ] Write `models/manifest.json` with: model version, feature schema hash, label schema hash,
+  training dataset id, calibration date, threshold config hash.
+- [ ] Add missing-artifact, schema-mismatch, and corrupted-model fallback tests.
 
-- [ ] Replace `src/diagnosis/rule_engine.py` with a thin orchestrator.
-- [ ] Create `src/diagnosis/rules/` with modules such as:
-  - `vibration.py`
-  - `compass.py`
-  - `power.py`
-  - `gps.py`
-  - `motors.py`
-  - `ekf.py`
-  - `mechanical_failure.py`
-  - `pid_tuning.py`
-  - `rc_failsafe.py`
-  - `thrust_loss.py`
-  - `setup_error.py`
-  - `brownout.py`
-  - `crash_unknown.py`
-- [ ] Create shared helpers if needed, for example:
-  - `src/diagnosis/rules/common.py`
+### Deliverable
 
-### Tests to add
-
-- [ ] `tests/test_diagnosis_rules.py`
-- [ ] threshold boundary tests for every rule:
-  - below threshold
-  - at threshold
-  - above threshold
+Single `/analyze` endpoint returns richer results with temporal smoothing, modular rule output,
+and full 14-label coverage. All results traceable to physics evidence.
 
 ### Done when
 
-- [ ] No rule change requires editing a giant 1000+ line file.
+- [ ] All 14 `VALID_LABELS` have at least one rule or ML path that can trigger them.
+- [ ] No rule change requires editing a file longer than 200 lines.
 
 ---
 
-## Goal 7 - Refactor the CLI Into Command Modules ☑
+## Milestone 4 — Advanced Capabilities
 
-### What to achieve
+**Goal:** Build the features that make this platform irreplaceable.
 
-Stop using one oversized CLI file as command parser, orchestrator, batch runner,
-formatter coordinator, and data tool hub.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Tasks
 
-- Move each command into its own module.
-- Keep `src/cli/main.py` as a dispatcher only.
+**Multi-Flight Trend Analysis:**
+- [ ] Create `multi-flight-analyzer/` service.
+- [ ] Accept multiple `.BIN` files or a folder; detect degradation trends across flights.
+- [ ] Output: trend plots (vibration over 10 flights, battery health curve, motor current drift).
 
-### Best approach
+**Tuning Advisor:**
+- [ ] Create `tuning-advisor/` service.
+- [ ] Rate PID parameters against the BASiC dataset baseline.
+- [ ] Attribute vibration sources (motor, prop, frame resonance).
+- [ ] Suggest notch filter center frequencies from FFT peaks.
 
-Use a command package with one file per subcommand.
+**Report Service:**
+- [ ] Create `report-service/` service.
+- [ ] Generate PDF reports with: diagnosis summary, causal timeline, 3D trajectory, evidence panels.
+- [ ] Generate structured JSON for external consumption (LLM agents, WebTools integration).
 
-### Files to change
+**CLI Refactoring (from open issues):**
+- [ ] Break `src/cli/main.py` into `src/cli/commands/` modules:
+  - `analyze.py`, `features.py`, `benchmark.py`, `batch_analyze.py`, `demo.py`
+- [ ] `main.py` becomes a thin dispatcher only.
 
-- [ ] Create `src/cli/commands/`.
-- [ ] Create command modules such as:
-  - `analyze.py`
-  - `features.py`
-  - `benchmark.py`
-  - `batch_analyze.py`
-  - `import_clean.py`
-  - `collect_forum.py`
-  - `mine_expert_labels.py`
-  - `demo.py`
-- [ ] Replace `src/cli/main.py` with a thin dispatcher.
-- [ ] Create `src/cli/utils.py` if shared CLI helpers are needed.
+**Bad Input Handling (from open issues):**
+- [ ] All batch, benchmark, and API endpoints handle empty/corrupt/partial `.BIN` files explicitly.
+- [ ] Exit codes and error messages are consistent across all paths.
 
-### Tests to add
+### Deliverable
 
-- [ ] Update `tests/test_cli.py`.
-- [ ] Add integration-style CLI tests for the main supported commands.
+Full platform — analyze, trend, tune, explain, export — all working end-to-end.
 
 ### Done when
 
-- [ ] `src/cli/main.py` is small enough to read in one sitting without annoyance.
+- [ ] A user can upload 10 flights, get a degradation trend report, and receive a tuning recommendation.
 
 ---
 
-## Goal 8 - Remove Dead, Duplicate, and Misleading Code ☑
+## Milestone 5 — Production Hardening & v2.0 Release
 
-### What to achieve
+**Goal:** Make the v2.0 platform release-ready for public use.
 
-Get rid of dead branches, duplicate tools, stub APIs, placeholder logic, and
-random loose test scripts.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Tasks
 
-- Delete disabled branches that are never executed.
-- Merge duplicate tools into one supported version.
-- Remove stubs unless they are implemented and tested.
-- Move loose experiments out of the repo root.
+- [ ] Comprehensive test coverage: unit + integration + real crash log regression tests.
+- [ ] Performance optimization: keep `/analyze` under 500ms on a standard log.
+- [ ] All Docker images published to GitHub Container Registry.
+- [ ] `docker compose up` documented as the one-line setup path.
+- [ ] Updated model card, architecture doc, output formats doc.
+- [ ] CHANGELOG updated to v2.0.
+- [ ] README updated to reflect v2.0 capabilities.
+- [ ] Release tag `v2.0.0` created on GitHub.
 
-### Best approach
+### Deliverable
 
-Prefer one supported implementation over parallel half-versions.
-
-### Files to change
-
-- [ ] Edit `src/features/fft_analysis.py` to remove dead logic and duplicate returns.
-- [ ] Edit `src/features/events.py` to replace placeholder heuristics with either:
-  - real logic, or
-  - clearly marked experimental logic with tests and documentation
-- [ ] Edit or remove `src/diagnosis/ml_classifier.py:get_feature_importance()`.
-- [ ] Keep only one of:
-  - `src/tools/analyze_thrust.py`
-  - `scripts/analyze_thrust.py`
-- [ ] Remove or archive loose root files such as:
-  - `test_bin.py`
-  - `test_bin2.py`
-  - `test_df.py`
-  - `test_parse_bin.py`
+Public v2.0 release. Anyone can run `docker compose up` and get a working instance.
 
 ### Done when
 
-- [ ] The repo tells one coherent story and no major file feels fake or abandoned.
+- [ ] All release gates from v1.0 still pass.
+- [ ] Docker image size is reasonable (< 2GB).
+- [ ] `README.md` accurately describes the v2.0 platform with no contradictions.
 
 ---
 
-## Goal 9 - Make Runtime Behavior Predictable on Bad Input ☑
+## Milestone 6 — Community Integration & Upstream Adoption
 
-### What to achieve
+**Goal:** Get this adopted as a recognized ArduPilot community tool.
 
-Empty, corrupt, and partial logs must not be treated like normal inputs.
+**Status:** ⬜ Not started
 
-### How to achieve it
+### Tasks
 
-- Apply extraction-failure handling in every diagnosis path.
-- Record failures clearly in benchmark runs.
-- Keep output and exit codes consistent.
+- [ ] Write a technical blog series covering: architecture decisions, CITA policy, temporal layer,
+  LLM-as-orchestrator philosophy.
+- [ ] Post the v2.0 release to the ArduPilot Discuss forum with a demo video.
+- [ ] Investigate integration with MAVProxy and ArduPilot WebTools.
+- [ ] Create a contribution guide for adding new rules, labels, and crash log datasets.
+- [ ] Publish Docker images to Docker Hub for easy discoverability.
+- [ ] Submit as a candidate for official ArduPilot tooling.
 
-### Best approach
+### Deliverable
 
-Use one shared invalid-input policy across CLI, batch analysis, and benchmark
-execution.
-
-### Files to change
-
-- [ ] Edit `src/cli/main.py` or the command modules created in Goal 7.
-- [ ] Edit `src/benchmark/suite.py`.
-- [ ] Edit any batch-analysis command implementation.
-
-### Must fix
-
-- [ ] `analyze` already guards extraction failure. Equivalent logic must also exist
-  in:
-  - `features`
-  - benchmark execution
-  - batch analyze paths
-
-### Tests to add
-
-- [ ] corrupt file behavior in `tests/test_cli.py`
-- [ ] extraction-failure handling in `tests/test_benchmark.py`
-
-### Done when
-
-- [ ] Bad logs produce explicit failure handling, not silent nonsense.
+ArduPilot community recognizes this as the best open-source log diagnosis platform.
 
 ---
 
-## Goal 10 - Make Benchmark Metrics Honest and Unambiguous ☑
+## Current v1.0 Status (Baseline)
 
-### What to achieve
+Before starting v2.0, the baseline is solid:
 
-Metric names in code, JSON, markdown, and docs must mean exactly the same thing.
-
-### How to achieve it
-
-- Rename misleading fields.
-- Add metric definitions.
-- Add tests that lock report language down.
-
-### Best approach
-
-Use explicit names like `any_match_accuracy` instead of overloaded `accuracy`.
-
-### Files to change
-
-- [ ] Edit `src/benchmark/results.py`.
-- [ ] Create `docs/METRICS.md`.
-- [ ] Update any report or README section that references benchmark accuracy.
-
-### Must fix
-
-- [ ] Stop labeling any-match accuracy as exact-match accuracy.
-
-### Tests to add
-
-- [ ] benchmark metric naming tests in `tests/test_benchmark.py`
-- [ ] markdown report text assertions
-
-### Done when
-
-- [ ] No serious reviewer can accuse the project of metric inflation or sloppy
-  wording.
+| Component | Status |
+|---|---|
+| XGBoost + IsolationForest classifier | ✅ Production-ready |
+| CITA temporal arbitration | ✅ Production-ready |
+| 3D interactive flight replay | ✅ Working |
+| Pre-flight parameter validation | ✅ Working |
+| FastAPI web endpoint | ✅ Working |
+| CLI | ✅ Working |
+| Test suite | ✅ 176/176 passing |
+| Macro F1 score | ✅ 1.00 on holdout set |
+| Rule coverage | ⚠️ 6 of 14 labels |
+| Compass rule | ⚠️ Relies heavily on ML fallback |
+| Docker / containerization | ❌ Not yet |
+| LLM explanation layer | ❌ Not yet |
+| Temporal HMM layer | ❌ Not yet |
+| Multi-flight analysis | ❌ Not yet |
+| Tuning advisor | ❌ Not yet |
 
 ---
 
-## Goal 11 - Make ML Optional, Honest, and Versioned ☑
+## Recommended Execution Order
 
-### What to achieve
-
-The tool must still be useful without ML, and ML must fail safely when artifacts
-or schemas do not match.
-
-### How to achieve it
-
-- Treat rule-only mode as a first-class supported mode.
-- Version model artifacts.
-- Validate schema compatibility at load time.
-- Surface ML availability in output.
-
-### Best approach
-
-Ship an artifact manifest and verify it on load.
-
-### Files to change
-
-- [ ] Edit `src/diagnosis/ml_classifier.py`.
-- [ ] Edit `src/diagnosis/hybrid_engine.py`.
-- [ ] Edit `src/cli/formatter.py`.
-- [ ] Edit `training/train_model.py` so it writes a manifest.
-- [ ] Create `models/manifest.json`.
-- [ ] Create `docs/ML_ARTIFACTS.md`.
-
-### Manifest should include
-
-- [ ] model version
-- [ ] feature schema hash
-- [ ] label schema hash
-- [ ] training dataset id
-- [ ] calibration date
-- [ ] threshold config hash
-
-### Tests to add
-
-- [ ] missing-artifact fallback
-- [ ] schema mismatch fallback
-- [ ] corrupted model handling
-- [ ] JSON output includes ML availability information
-
-### Done when
-
-- [ ] ML becomes a defensible layer, not a hidden fragility.
-
----
-
-## Goal 12 - Rebuild the Test Suite So It Proves Behavior ☑
-
-### What to achieve
-
-Replace weak smoke tests with real contract, value, and integration tests.
-
-### How to achieve it
-
-- Add direct tests for parser behavior.
-- Add extractor-level tests for every extractor.
-- Add rule boundary tests.
-- Add hybrid-engine conflict and arbitration tests.
-- Add benchmark formula and report tests.
-- Add CLI end-to-end smoke tests.
-
-### Best approach
-
-Test exact behavior on small, controlled inputs. Avoid tests that only prove the
-program did not crash.
-
-### Files to change
-
-- [x] Edit `tests/test_parser.py` and remove placeholder assertions.
-- [x] Edit `tests/test_features.py` and broaden coverage.
-- [x] Edit `tests/test_diagnosis.py` and split it if needed.
-- [x] Create `tests/test_hybrid_engine.py` if the hybrid tests deserve a dedicated
-  file.
-- [x] Edit `tests/test_benchmark.py`.
-- [x] Edit `tests/test_cli.py`.
-- [ ] Add a tiny stable `.BIN` fixture if the repo does not already contain one.
-
-### Coverage target
-
-- [x] Reach strong coverage on `src/parser`, `src/features`, `src/diagnosis`, and
-  `src/benchmark`.
-
-### Done when
-
-- [x] Tests prove correctness and block regressions instead of merely showing survival.
-
-### Completed Actions
-
-- Replaced placeholder parser tests with mocked parser behavior tests
-- Added schema, benchmark, FFT, rule-module, ML artifact, and parser-feature
-  alignment tests
-- Shifted several tests from smoke-only behavior toward contract validation
-
----
-
-## Goal 13 - Polish Docs, Output, and Release Readiness ☑
-
-### What to achieve
-
-Make the project feel intentional, clear, and trustworthy in both code and
-presentation.
-
-### How to achieve it
-
-- Rewrite key docs around reproducibility and honesty.
-- Align terminal, JSON, and HTML outputs with the diagnosis contract.
-- Add a release checklist.
-
-### Best approach
-
-Keep user-facing output precise and useful. Show evidence, method, decision, and
-review requirement clearly.
-
-### Files to change
-
-- [x] Edit `README.md`.
-- [x] Edit `src/cli/formatter.py`.
-- [x] Create `docs/ARCHITECTURE.md` if the current architecture story is stale.
-- [x] Create `docs/OUTPUT_FORMATS.md`.
-- [x] Create `docs/TESTING.md`.
-- [x] Create `docs/RELEASE_CHECKLIST.md`.
-
-### Must include in docs
-
-- [x] exact setup commands
-- [x] exact test commands
-- [x] exact benchmark commands
-- [x] metric definitions
-- [x] known limitations
-- [x] what is optional vs required
-
-### Done when
-
-- [x] A reviewer can run the project, understand the output, and verify claims
-  without guessing.
-
-### Completed Actions
-
-- Added `docs/ARCHITECTURE.md`, `docs/OUTPUT_FORMATS.md`, `docs/TESTING.md`,
-  and `docs/RELEASE_CHECKLIST.md`
-- Added runtime engine visibility to formatter outputs
-- Tightened README, reproducibility docs, and release-facing documentation
-
----
-
-## Release Gates
-
-Do not call the project ready until all of these are true:
-
-- `python -m src.cli.main --help` works in the documented environment.
-- `python -m src.cli.main demo` works in the documented environment.
-- `python -m src.cli.main analyze sample.bin --no-ml` works.
-- `python -m pytest -q` passes in the documented environment.
-- CI uses the same setup path documented for humans.
-- Benchmark smoke run succeeds and reports correctly named metrics.
-- README, docs, CLI output, and code terminology all agree.
-- No major dead, duplicate, or misleading files remain in the active repo.
-
----
-
-## Recommended Order of Attack
-
-1. Goal 1 - Freeze Scope and Clean Project Boundaries
-2. Goal 2 - Make Setup Reproducible From a Fresh Clone
-3. Goal 3 - Rewrite README So It Tells the Truth
-4. Goal 4 - Lock Data Contracts Across the Pipeline
-5. Goal 5 - Align Parser Retention With Extractor Requirements
-6. Goal 6 - Refactor the Rule Engine Into Small, Testable Modules
-7. Goal 7 - Refactor the CLI Into Command Modules
-8. Goal 8 - Remove Dead, Duplicate, and Misleading Code
-9. Goal 9 - Make Runtime Behavior Predictable on Bad Input
-10. Goal 10 - Make Benchmark Metrics Honest and Unambiguous
-11. Goal 11 - Make ML Optional, Honest, and Versioned
-12. Goal 12 - Rebuild the Test Suite So It Proves Behavior
-13. Goal 13 - Polish Docs, Output, and Release Readiness
+1. **Milestone 0** — Containerize first. Safety net before touching anything.
+2. **Milestone 1** — Temporal layer. Fastest improvement to diagnostic quality.
+3. **Milestone 3 (Rule Engine only)** — Clean up the rule engine in parallel.
+4. **Milestone 2** — LLM layer. High user-facing value, low risk (rules still decide).
+5. **Milestone 3 (Dead Labels + Scalers)** — Complete after LLM layer is working.
+6. **Milestone 4** — Advanced features once the core is solid.
+7. **Milestone 5** — Harden and release.
+8. **Milestone 6** — Community adoption.
 
 ---
 
 ## One-Line Rule
 
-Do not chase "best project" energy with more features.
-Earn it by making the existing project clean, reproducible, honest, and hard to
-break.
+Do not add flashy new features on top of a broken foundation.
+Earn the reputation by making what exists clean, reproducible, honest, and hard to break.
+Then build upward from a position of strength.

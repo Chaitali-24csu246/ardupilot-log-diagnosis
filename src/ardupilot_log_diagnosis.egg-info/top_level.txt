@@ -1,6 +1,8 @@
 __init__
 benchmark
+chat
 cli
+comparison
 constants
 contracts
 data
@@ -8,4 +10,7 @@ diagnosis
 features
 parser
 retrieval
+runtime_paths
 tools
+tuning
+web

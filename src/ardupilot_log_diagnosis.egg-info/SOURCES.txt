@@ -3,6 +3,7 @@ pyproject.toml
 src/__init__.py
 src/constants.py
 src/contracts.py
+src/runtime_paths.py
 src/ardupilot_log_diagnosis.egg-info/PKG-INFO
 src/ardupilot_log_diagnosis.egg-info/SOURCES.txt
 src/ardupilot_log_diagnosis.egg-info/dependency_links.txt
@@ -14,6 +15,8 @@ src/benchmark/calibration.py
 src/benchmark/reporter.py
 src/benchmark/results.py
 src/benchmark/suite.py
+src/chat/__init__.py
+src/chat/assistant.py
 src/cli/__init__.py
 src/cli/formatter.py
 src/cli/main.py
@@ -23,11 +26,15 @@ src/cli/commands/batch.py
 src/cli/commands/benchmark.py
 src/cli/commands/collect_forum.py
 src/cli/commands/common.py
+src/cli/commands/compare.py
 src/cli/commands/demo.py
 src/cli/commands/features.py
 src/cli/commands/import_clean.py
 src/cli/commands/label.py
 src/cli/commands/mine_expert_labels.py
+src/cli/commands/ui.py
+src/comparison/__init__.py
+src/comparison/trend_analyzer.py
 src/data/__init__.py
 src/data/auto_labeler.py
 src/data/clean_import.py
@@ -41,6 +48,7 @@ src/diagnosis/decision_policy.py
 src/diagnosis/failure_types.py
 src/diagnosis/hybrid_engine.py
 src/diagnosis/ml_classifier.py
+src/diagnosis/parameter_validation.py
 src/diagnosis/rule_engine.py
 src/diagnosis/rules/__init__.py
 src/diagnosis/rules/control_and_events.py
@@ -68,6 +76,10 @@ src/parser/bin_parser.py
 src/retrieval/__init__.py
 src/retrieval/similarity.py
 src/tools/analyze_thrust.py
+src/tuning/__init__.py
+src/tuning/advisor.py
+src/web/app.py
+src/web/schemas.py
 tests/test_benchmark.py
 tests/test_benchmark_metrics.py
 tests/test_clean_import.py
@@ -82,9 +94,13 @@ tests/test_forum_collector.py
 tests/test_hard_gates.py
 tests/test_hybrid_engine.py
 tests/test_ml_artifacts.py
+tests/test_parameter_validation.py
 tests/test_parser.py
 tests/test_parser_feature_alignment.py
 tests/test_real_logs_integration.py
 tests/test_retrieval.py
+tests/test_runtime_paths.py
 tests/test_schema_contracts.py
 tests/test_sitl_detectors.py
+tests/test_web.py
+tests/test_web_app.py

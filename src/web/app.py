@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
-from src.web.schemas import AnalysisResponse
+from src.web.schemas import AnalysisResponse, ChatRequest, ChatResponse
 
 from src.diagnosis.decision_policy import evaluate_decision
 from src.diagnosis.hybrid_engine import HybridEngine
@@ -20,6 +20,8 @@ from src.diagnosis.parameter_validation import validate_parameters
 from src.diagnosis.rule_engine import RuleEngine
 from src.features.pipeline import FeaturePipeline
 from src.parser.bin_parser import LogParser
+from src.chat.assistant import ChatAssistant
+from src.comparison.trend_analyzer import TrendAnalyzer
 
 
 LOGGER = logging.getLogger(__name__)
@@ -274,3 +276,81 @@ def _find_start_time_us(parsed: dict[str, Any]) -> int | None:
                 return t_us
 
     return None
+
+
+# Chat endpoint for conversational AI over log analysis
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """Answer questions about a log analysis using rule-based AI assistant."""
+    try:
+        assistant = ChatAssistant()
+        response_data = assistant.ask(request.question, request.analysis_result)
+        
+        return ChatResponse(
+            question=response_data["question"],
+            answer=response_data["answer"],
+            confidence=response_data["confidence"],
+            sources=response_data.get("sources", []),
+            follow_up=response_data.get("follow_up", [])
+        )
+    except Exception as e:
+        LOGGER.exception("Error during chat")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Chat failed. Check server logs for details."}
+        )
+
+
+# Trend analysis endpoint for multi-flight comparison
+@app.post("/api/compare", response_model=dict)
+async def compare_flights(files: list[UploadFile] = File(...)):
+    """Compare multiple flight logs for trend analysis and degradation detection."""
+    if len(files) < 2:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "At least 2 files required for comparison"}
+        )
+    
+    try:
+        analysis_results = []
+        engine = HybridEngine()
+        parser_obj = LogParser("")
+        pipeline = FeaturePipeline()
+        
+        for file in files:
+            if not file.filename or not file.filename.lower().endswith(".bin"):
+                continue
+            
+            # Save to temp file
+            fd, temp_path = tempfile.mkstemp(suffix=".bin")
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    content = await file.read()
+                    f.write(content)
+                
+                # Analyze
+                result = _analyze_temp_log(temp_path, file.filename)
+                analysis_results.append(result)
+            finally:
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+        
+        if len(analysis_results) < 2:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Need at least 2 valid .BIN files"}
+            )
+        
+        # Run trend analysis
+        analyzer = TrendAnalyzer()
+        trend_report = analyzer.compare_flights(analysis_results)
+        
+        return trend_report
+    except Exception as e:
+        LOGGER.exception("Error during comparison")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Comparison failed. Check server logs for details."}
+        )

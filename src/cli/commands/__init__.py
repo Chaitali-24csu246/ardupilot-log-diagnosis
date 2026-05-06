@@ -1,10 +1,11 @@
-from . import analyze, batch, benchmark, collect_forum, demo, features, import_clean, label, mine_expert_labels, ui
+from . import analyze, batch, benchmark, collect_forum, compare, demo, features, import_clean, label, mine_expert_labels, ui
 
 COMMAND_MODULES = [
     analyze,
     features,
     benchmark,
     batch,
+    compare,
     label,
     demo,
     import_clean,

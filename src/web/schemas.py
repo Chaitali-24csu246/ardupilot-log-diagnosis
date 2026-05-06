@@ -42,3 +42,18 @@ class AnalysisResponse(BaseModel):
     timeline_events: list[TimelineEvent]
     rule_output_only: str
     rule_output_diagnoses: list[dict[str, Any]]
+
+
+class ChatRequest(BaseModel):
+    """Request schema for chat endpoint."""
+    question: str
+    analysis_result: dict[str, Any]
+
+
+class ChatResponse(BaseModel):
+    """Response schema for chat endpoint."""
+    question: str
+    answer: str
+    confidence: float
+    sources: list[str]
+    follow_up: list[str]

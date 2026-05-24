@@ -6,8 +6,15 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.request import Request
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+load_dotenv()
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
@@ -30,14 +37,29 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024
 WEB_DIR = Path(__file__).parent.absolute()
 
 app = FastAPI(title="ArduPilot Log Diagnosis API")
+
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS setup — reads from environment variable, falls back to allow all
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+ALLOWED_ORIGINS = (
+    ["*"]
+    if _raw_origins.strip() == "*"
+    else [o.strip() for o in _raw_origins.split(",") if o.strip()]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOWED_ORIGINS != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+RATE_LIMIT_ANALYZE = os.getenv("RATE_LIMIT_ANALYZE", "10/minute")
+RATE_LIMIT_CHAT = os.getenv("RATE_LIMIT_CHAT", "20/minute")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index() -> str:
@@ -46,9 +68,10 @@ async def get_index() -> str:
         return index_path.read_text(encoding="utf-8")
     return "UI not found"
 
-
 @app.post("/api/analyze", response_model=AnalysisResponse)
-async def analyze_log(file: UploadFile = File(...)):
+@limiter.limit(RATE_LIMIT_ANALYZE)
+async def analyze_log(request: Request, file: UploadFile = File(...)):
+    
     if not file.filename or not file.filename.lower().endswith(".bin"):
         return JSONResponse(status_code=400, content={"error": "Only .BIN files are supported."})
 
@@ -280,11 +303,13 @@ def _find_start_time_us(parsed: dict[str, Any]) -> int | None:
 
 # Chat endpoint for conversational AI over log analysis
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+@limiter.limit(RATE_LIMIT_CHAT)
+async def chat(request: Request, body: ChatRequest):
     """Answer questions about a log analysis using rule-based AI assistant."""
     try:
         assistant = ChatAssistant()
-        response_data = assistant.ask(request.question, request.analysis_result)
+
+        response_data = assistant.ask(body.question, body.analysis_result)
         
         return ChatResponse(
             question=response_data["question"],

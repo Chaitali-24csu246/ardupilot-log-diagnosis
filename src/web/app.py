@@ -50,17 +50,19 @@ ALLOWED_ORIGINS = (
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=ALLOWED_ORIGINS != ["*"],
+    allow_credentials="*" not in ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 RATE_LIMIT_ANALYZE = os.getenv("RATE_LIMIT_ANALYZE", "10/minute")
 RATE_LIMIT_CHAT = os.getenv("RATE_LIMIT_CHAT", "20/minute")
+RATE_LIMIT_COMPARE = os.getenv("RATE_LIMIT_COMPARE", "5/minute")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index() -> str:
+    """Serve the frontend dashboard HTML."""
     index_path = WEB_DIR / "index.html"
     if index_path.exists():
         return index_path.read_text(encoding="utf-8")
@@ -70,6 +72,7 @@ async def get_index() -> str:
 @app.post("/api/analyze", response_model=AnalysisResponse)
 @limiter.limit(RATE_LIMIT_ANALYZE)
 async def analyze_log(request: Request, file: UploadFile = File(...)):
+    """Accept a .BIN file upload and return a full diagnostic analysis."""
     if not file.filename or not file.filename.lower().endswith(".bin"):
         return JSONResponse(status_code=400, content={"error": "Only .BIN files are supported."})
 
@@ -110,6 +113,7 @@ async def analyze_log(request: Request, file: UploadFile = File(...)):
 
 
 def _analyze_temp_log(temp_path: str, original_filename: str) -> dict[str, Any]:
+    """Run the full parse → feature extraction → diagnosis pipeline on a temp log file."""
     parser = LogParser(temp_path)
     parsed = parser.parse()
 
@@ -152,6 +156,7 @@ def _analyze_temp_log(temp_path: str, original_filename: str) -> dict[str, Any]:
 def _build_visualization_data(
     parsed: dict[str, Any], features: dict[str, Any]
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+    """Build GPS and vibration time series and timeline events for visualisation."""
     time_series: dict[str, list[dict[str, Any]]] = {"gps": [], "vibe": []}
     start_time = _find_start_time_us(parsed)
 
@@ -202,6 +207,7 @@ def _build_visualization_data(
             )
 
     def get_gps_at(t_target: float) -> dict[str, Any] | None:
+        """Return the GPS point closest in time to t_target."""
         if not time_series["gps"]:
             return None
         return min(time_series["gps"], key=lambda point: abs(point["t"] - t_target))
@@ -283,6 +289,7 @@ def _build_visualization_data(
 
 
 def _find_start_time_us(parsed: dict[str, Any]) -> int | None:
+    """Return the earliest TimeUS timestamp found across all message types."""
     message_groups = parsed.get("messages", {})
     for message_type in ("VIBE", "GPS"):
         for msg in message_groups.get(message_type, []):
@@ -302,7 +309,7 @@ def _find_start_time_us(parsed: dict[str, Any]) -> int | None:
 @app.post("/api/chat", response_model=ChatResponse)
 @limiter.limit(RATE_LIMIT_CHAT)
 async def chat(request: Request, body: ChatRequest):
-    """Answer questions about a log analysis using rule-based AI assistant."""
+    """Answer questions about a log analysis using the rule-based AI assistant."""
     try:
         assistant = ChatAssistant()
         response_data = assistant.ask(body.question, body.analysis_result)
@@ -322,7 +329,8 @@ async def chat(request: Request, body: ChatRequest):
 
 
 @app.post("/api/compare", response_model=dict)
-async def compare_flights(files: list[UploadFile] = File(...)):
+@limiter.limit(RATE_LIMIT_COMPARE)
+async def compare_flights(request: Request, files: list[UploadFile] = File(...)):
     """Compare multiple flight logs for trend analysis and degradation detection."""
     if len(files) < 2:
         return JSONResponse(
@@ -339,12 +347,23 @@ async def compare_flights(files: list[UploadFile] = File(...)):
 
             fd, temp_path = tempfile.mkstemp(suffix=".bin")
             try:
-                with os.fdopen(fd, "wb") as f:
-                    content = await file.read()
-                    f.write(content)
-                result = _analyze_temp_log(temp_path, file.filename)
+                total_bytes = 0
+                with os.fdopen(fd, "wb") as handle:
+                    while True:
+                        chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        total_bytes += len(chunk)
+                        if total_bytes > MAX_UPLOAD_BYTES:
+                            return JSONResponse(
+                                status_code=413,
+                                content={"error": f"File {file.filename} exceeds {MAX_UPLOAD_BYTES} bytes."},
+                            )
+                        handle.write(chunk)
+                result = await asyncio.to_thread(_analyze_temp_log, temp_path, file.filename)
                 analysis_results.append(result)
             finally:
+                await file.close()
                 try:
                     os.unlink(temp_path)
                 except OSError:
